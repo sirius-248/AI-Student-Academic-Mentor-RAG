@@ -1,0 +1,139 @@
+# AI Student Academic Mentor - project-specific .gitignore
+# Carefully curated to exclude generated, local, and environment-specific
+# files while keeping all project source code and shared configuration.
+
+# ---------------------------------------------------------------------------
+# Python bytecode and compiled artifacts
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# ---------------------------------------------------------------------------
+# Virtual environments (common names used on Windows)
+# ---------------------------------------------------------------------------
+.venv/
+venv/
+env/
+ENV/
+
+# ---------------------------------------------------------------------------
+# IDE / Editor
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+# Editor temp/swap files
+*~
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# ---------------------------------------------------------------------------
+# OS generated files
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+Desktop.ini
+~$*
+
+# ---------------------------------------------------------------------------
+# Build, packaging, test & coverage
+# ---------------------------------------------------------------------------
+build/
+dist/
+*.egg-info/
+.eggs/
+.python-version
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+.mypy_cache/
+.ruff_cache/
+
+# ---------------------------------------------------------------------------
+# Environment variables and secrets
+# ---------------------------------------------------------------------------
+# Ignore local environment files that may contain credentials
+.env
+.env.local
+.env.*.local
+# Keep template/example env files in repository
+!.env.example
+
+# Misc secret directories (if created locally)
+.secrets/
+credentials/
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+logs/
+*.log
+
+# ---------------------------------------------------------------------------
+# Databases & runtime files
+# ---------------------------------------------------------------------------
+*.sqlite3
+*.db
+*.db-journal
+*.pid
+*.sock
+*.bak
+
+# ---------------------------------------------------------------------------
+# Generated outputs / project artifacts
+# ---------------------------------------------------------------------------
+# Ignore generated outputs but allow intentional placeholders like .gitkeep
+output/*
+!output/.gitkeep
+
+# generated intermediate directories
+generated/
+temp/
+
+# ---------------------------------------------------------------------------
+# ML model caches and local downloads (anchored to repo root)
+# These are large and generated locally; keep them out of Git. Anchor to
+# repository root to avoid accidentally ignoring source folders like app/models/.
+# ---------------------------------------------------------------------------
+/.cache/
+/.cache-*
+/models/
+/model_cache/
+/huggingface/
+/transformers_cache/
+/sentence_transformers_cache/
+/.torch/
+
+# ---------------------------------------------------------------------------
+# Notebooks
+# ---------------------------------------------------------------------------
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Platform / Misc
+# ---------------------------------------------------------------------------
+*.msi
+*.exe
+
+# ---------------------------------------------------------------------------
+# Explicit inclusions (keep project source and important files tracked)
+# ---------------------------------------------------------------------------
+# The following are intentionally NOT ignored (tracked in the repo):
+# - app/ (source code)
+# - tests/ (tests)
+# - data/sample_pdfs/ (sample data used for testing)
+# - README.md, LICENSE, requirements.txt, pyproject.toml
+# - documentation/ and prompts/
+# - preprocessing/ and embeddings/ code under app/
+
+# Ensure GitHub workflows remain tracked
+!.github/
