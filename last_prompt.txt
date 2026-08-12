@@ -1,0 +1,111 @@
+You are an expert AI Academic Mentor assisting students with course materials.
+
+CRITICAL RULES & GUIDELINES:
+1. Grounding: Base your answer STRICTLY and ONLY on the provided context material below.
+2. Anti-Hallucination: If the information required to answer the question is not present in the provided context, explicitly state: 'I am sorry, but the answer to your question is not available in the provided academic material.' Do NOT attempt to invent, extrapolate, or use external knowledge.
+3. Source Citations: Whenever you cite specific facts, algorithms, or concepts from the context, include a clear citation referencing the source file name and page number (e.g., [Operating Systems.pdf, Page 12]) if available in the context header.
+4. Tone: Provide a clear, educational, well-structured, and helpful academic response.
+
+==================================================
+Context Material:
+==================================================
+Source:
+string_BCS602-module-1-pdf.pdf
+
+Page:
+N/A
+
+Content:
+.
+Machine learning, comparatively, has less assumptions and requires less statistical knowledge. But, it often requires interaction with various tools to automate the process of learning.
+
+TYPES OF MACHINE LEARNING
+ Data is a raw fact. Normally, data is represented in the form of a table. Data also can be referred to as a data point, sample, or an example. Each row of the table represents a data point.
+ Features are attributes or characteristics of an object. Normally, the columns of the table are attributes.
+ Out of all attributes, one attribute is important and is called a label. Label is the feature that we aim to predict.
+
+analytics
+
+ Thus, there are two types of data – labelled and unlabel led.
+ Labeled data is data that has some predefined tags such as name, type, or number.
+To illustrate labelled data, let us take one example dat aset called Iris flower dataset. The dataset has 3 samples of Iris – with four attributes, length and width of s epals and petals. The target variable
+is called class . There are three classes – Iris setosa, Iris virginica, and Iris versicolor .
+==================================================
+==================================================
+Source:
+string_BCS602-module-1-pdf.pdf
+
+Page:
+N/A
+
+Content:
+learning which offer to locate and navigate shortest paths to reduce time . The machine learning applications are en ormous. The following Table summarizes som e of the machine learning applications.
+
+S.No. Problem Domain Applications
+1. Business Predicting the bankruptcy of a business firm
+2. Banking Prediction of bank loan defaulters and detecting credit card frauds
+3. Image Processing Image search engines, object identification, image classification, and
+generating synthetic images
+4. Audio/Voice Chatbots like Alexa, Microsoft Cortana. Developing chatbots for customer support, speech to text, and text to voice
+==================================================
+==================================================
+Source:
+string_BCS602-module-1-pdf.pdf
+
+Page:
+N/A
+
+Content:
+to clusters using a trial and error approach.  Cluster Analysis – A type of unsupervised approach that groups the objects based on attributes so that similar objects or data points form a cluster.
+
+ Semi -supervised Learning – A type of machine learning that uses limited labelled and large unlabeled data. It first labels unlabelled data using labelled data and combines it for learning
+purposes.  Reinforcement Learning – A type of machine learning that uses agents and environment interaction for creating labelled data for learning.  Well -posed Problem – A problem that has well -defined specifications. Otherwise, the problem is called ill -posed.  Bias/Variance – The inability of the machine learning algorithm to predict correctly due to lack of generalization is called bias. Variance is the error of the model for training data. This leads to
+problems called overfitting and underfitting.  Model Deployment – A method of deploying machine learning algorithms to improve the existing business processes for a new situation.
+==================================================
+==================================================
+Source:
+string_BCS602-module-1-pdf.pdf
+
+Page:
+N/A
+
+Content:
+Domain Discovery of new galaxies, identification of groups of houses based on house type/geographical location, identification of
+earthquake epicent ers, and identification of similar land use
+
+KEY TERMS:
+ Machine Learning – A branch of AI that concerns about machines to learn automatically without being explicitly programmed.
+ Data – A raw fact.
+ Model – An explicit description of patterns in a data.
+ Experience – A collection of knowledge and heuristics in humans and historical training data in case of machines.
+ Predictive Modelling – A technique of developing models and making a prediction of unseen data.
+ Deep Learning – A branch of machine learning tha t deals with constructing models using neural networks.
+ Data Science – A field of study that encompasses capturing of data to its analysis covering all stages of data management.
+ Data Analytics – A field of study that deals with analysis of data.
+ Big Data – A study of data that has characteristics of volume, variety, and velocity.
+ Statistics – A branch of mathematics that deals with learning from data using statistical methods.
+ Hypothesis – An initial assumption of an experiment.
+==================================================
+==================================================
+Source:
+string_BCS602-module-1-pdf.pdf
+
+Page:
+N/A
+
+Content:
+process.
+Some of the key a lgorithms of classification are Decision Tree, Random Forest, Support Vector Machines, Naïve Bayes, Artificial Neural Network and Deep Learning networks
+like CNN .
+
+ii) Regression Models
+Regression models, unlike classification algorithms, predict continuous variables like price.
+In other words, it is a number.
+A fitted regression mod el is shown in Figure for a dataset that represent weeks input x and product sales y .
+==================================================
+
+Question:
+What are the types of machine learning?
+==================================================
+
+Answer:

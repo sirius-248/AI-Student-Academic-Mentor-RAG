@@ -98,6 +98,8 @@ output/*
 # generated intermediate directories
 generated/
 temp/
+/data/uploads/
+/data/vector_store/
 
 # ---------------------------------------------------------------------------
 # ML model caches and local downloads (anchored to repo root)
