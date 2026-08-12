@@ -1,148 +1,145 @@
-"""Application entry point for the AI Student Academic Mentor."""
+"""Command-line interface for the AI Student Academic Mentor RAG system."""
+from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from chunking.text_chunker import TextChunker
-from document_reader.pdf_reader import PDFReader
-from llm.base_client import LLMClientError
-from llm.client_factory import LLMClientFactory
-from models.document_chunk import DocumentChunk
-from preprocessing.pipeline import PreprocessingPipeline
-from prompts.prompts import PromptManager
+from app.pipeline import (
+    PipelineConfigurationError,
+    PipelineGenerationError,
+    PipelineIndexingError,
+    PipelineValidationError,
+    RAGPipeline,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def configure_logging() -> None:
-    """Configure application logging."""
-
-    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-
+    """Configure the CLI's application logging."""
     logging.basicConfig(
-        level=log_level,
+        level=os.getenv("LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s - %(levelname)s - %(message)s",
     )
 
 
 def find_pdf_path(directory: Path) -> Path:
-    """Return the first PDF found inside the given directory."""
-
+    """Return the first PDF in ``directory`` or raise a helpful error."""
+    if not directory.is_dir():
+        raise FileNotFoundError(f"PDF directory not found: {directory}")
     pdf_files = sorted(directory.glob("*.pdf"))
-
     if not pdf_files:
-        raise FileNotFoundError(
-            f"No PDF files found in: {directory}"
-        )
-
+        raise FileNotFoundError(f"No PDF files found in: {directory}")
     return pdf_files[0]
 
 
-def save_chunks(chunks: list[DocumentChunk], output_file: Path) -> None:
-    """
-    Save all generated chunks to a text file with metadata.
-
-    Each chunk includes its ID, document ID, source file, and optional page number.
-    """
-
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    with open(output_file, "w", encoding="utf-8") as file:
-        for chunk in chunks:
-            file.write("=" * 80 + "\n")
-            file.write(f"Chunk ID : {chunk.chunk_id}\n")
-            file.write(f"Document : {chunk.document_id}\n")
-            file.write(f"Source   : {chunk.source_file}\n")
-            if chunk.page_number is not None:
-                file.write(f"Page     : {chunk.page_number}\n")
-            file.write("=" * 80 + "\n")
-            file.write(chunk.text)
-            file.write("\n\n")
+def create_document_id(pdf_path: Path) -> str:
+    """Create a predictable identifier from a source filename."""
+    identifier = re.sub(r"[^a-z0-9]+", "_", pdf_path.stem.lower()).strip("_")
+    return identifier or "document"
 
 
-def main() -> None:
-    """Run the AI Student Academic Mentor pipeline."""
+def _display_indexing_result(result: object) -> None:
+    """Print the stable, user-facing indexing summary."""
+    pages = getattr(result, "pages_processed", None)
+    print("\nIndexed:")
+    print(getattr(result, "document_name", "Unknown document"))
+    print(f"Document ID: {getattr(result, 'document_id', 'unknown')}")
+    print(f"Pages processed: {pages if pages is not None else 'N/A'}")
+    print(f"Chunks created: {getattr(result, 'chunks_created', 0)}")
+    print(f"Vectors added: {getattr(result, 'vectors_added', 0)}")
+    print(f"Processing time: {getattr(result, 'processing_time_ms', 0.0) / 1000:.2f} s")
 
+
+def _display_answer(response: object) -> None:
+    """Print an answer and its source citations."""
+    print("\n" + "-" * 36)
+    print("Answer")
+    print("-" * 36)
+    print(getattr(response, "answer", ""))
+    print("\n" + "-" * 36)
+    print("Sources")
+    print("-" * 36)
+    sources = getattr(response, "sources", ())
+    if not sources:
+        print("No matching sources were found.")
+    else:
+        for source in sources:
+            page = getattr(source, "page_number", None)
+            location = f" (Page {page})" if page is not None else ""
+            print(f"{getattr(source, 'filename', 'Unknown source')}{location}")
+    print(f"\nResponse Time:\n{getattr(response, 'total_time_ms', 0.0) / 1000:.2f} s")
+
+
+def main() -> int:
+    """Index the configured document and serve an interactive RAG session."""
     project_root = Path(__file__).resolve().parents[1]
-
     load_dotenv(project_root / ".env")
-
     configure_logging()
-    logger = logging.getLogger(__name__)
 
-    pdf_folder = Path(
-        os.getenv(
-            "PDF_DATA_PATH",
-            project_root / "data" / "sample_pdfs",
-        )
-    )
+    configured_directory = Path(os.getenv("PDF_DATA_PATH", "data/sample_pdfs"))
+    pdf_directory = configured_directory if configured_directory.is_absolute() else project_root / configured_directory
 
     try:
-        logger.info("Reading PDF...")
+        pdf_path = find_pdf_path(pdf_directory)
+        document_id = create_document_id(pdf_path)
+        logger.info("Initializing RAG pipeline")
+        pipeline = RAGPipeline()
+        logger.info("Indexing PDF: %s", pdf_path.name)
+        # The current facade accepts the path first and the optional ID by name.
+        result = pipeline.index_document(pdf_path, document_id=document_id)
+        _display_indexing_result(result)
+    except FileNotFoundError as exc:
+        logger.error("%s", exc)
+        print(f"\nUnable to start: {exc}")
+        return 1
+    except PipelineValidationError as exc:
+        logger.error("Invalid indexing request: %s", exc)
+        print(f"\nUnable to index the document: {exc}")
+        return 1
+    except (PipelineConfigurationError, PipelineIndexingError) as exc:
+        logger.error("Indexing failed: %s", exc)
+        print("\nUnable to index the document. Check the logs and configuration, then try again.")
+        return 1
+    except KeyboardInterrupt:
+        print("\nGoodbye.")
+        return 0
 
-        pdf_path = find_pdf_path(pdf_folder)
+    print("\n" + "=" * 51)
+    print("AI Student Academic Mentor")
+    print("=" * 51)
+    print("Ask a question, or type 'exit' or 'quit' to finish.")
 
-        reader = PDFReader()
-        document_text = reader.extract_text(str(pdf_path))
+    while True:
+        try:
+            question = input("\nAsk a question\n> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\nGoodbye.")
+            return 0
 
-        logger.info("Preprocessing text...")
+        if question.lower() in {"exit", "quit"}:
+            print("Goodbye.")
+            return 0
+        if not question:
+            print("Please enter a question or type 'exit'.")
+            continue
 
-        pipeline = PreprocessingPipeline()
-        clean_text = pipeline.execute(document_text)
-
-        logger.info("Chunking document...")
-
-        chunker = TextChunker(
-            chunk_size=1000,
-            overlap=200,
-        )
-
-        chunks = chunker.chunk_text(
-            text=clean_text,
-            source_file=pdf_path.name,
-        )
-
-        logger.info("Created %d chunks.", len(chunks))
-
-        if not chunks:
-            raise ValueError("No chunks were generated from the document.")
-
-        save_chunks(
-            chunks,
-            project_root / "output" / "chunks.txt",
-        )
-
-        logger.info("Chunks saved to output/chunks.txt")
-
-        logger.info("Generating prompt...")
-
-        # Temporary: only use the first chunk
-        prompt = PromptManager.create_summary_prompt(chunks[0].text)
-
-        logger.info("Initializing LLM...")
-
-        client = LLMClientFactory.create_client()
-
-        logger.info("Generating response...")
-
-        response = client.generate(prompt)
-
-        print("\n")
-        print("=" * 80)
-        print(response)
-        print("=" * 80)
-
-    except (
-        FileNotFoundError,
-        ValueError,
-        LLMClientError,
-    ) as exc:
-
-        logger.error(str(exc))
-        sys.exit(1)
+        try:
+            _display_answer(pipeline.answer_question(question))
+        except PipelineValidationError as exc:
+            print(f"Unable to process that question: {exc}")
+        except PipelineGenerationError as exc:
+            logger.error("Question answering failed: %s", exc)
+            print("Unable to generate an answer right now. Please try again.")
+        except KeyboardInterrupt:
+            print("\nGoodbye.")
+            return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

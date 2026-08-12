@@ -30,19 +30,19 @@ class GeminiClient(BaseLLMClient):
         self.client = genai.Client(api_key=self.api_key)
 
     def generate(self, prompt: str) -> str:
-        """Generate text from Gemini for the provided prompt.
+        """Generate text from Gemini for the provided prompt."""
 
-        Args:
-            prompt: The input prompt string.
-
-        Returns:
-            The generated text response.
-
-        Raises:
-            LLMClientError: If the generation fails or returns empty response.
-        """
         if not prompt or not prompt.strip():
             raise ValueError("Prompt text must not be empty.")
+
+        # Save the exact prompt for debugging
+        with open("last_prompt.txt", "w", encoding="utf-8") as f:
+            f.write(prompt)
+
+        print("\n" + "=" * 80)
+        print(f"Prompt length: {len(prompt)} characters")
+        print("Prompt saved to last_prompt.txt")
+        print("=" * 80 + "\n")
 
         try:
             response = self.client.models.generate_content(
@@ -54,8 +54,10 @@ class GeminiClient(BaseLLMClient):
                 raise LLMClientError("Gemini returned an empty response.")
 
             return response.text
+
         except LLMClientError:
             raise
+
         except Exception as exc:
             logger.exception("Error generating content from Gemini.")
             raise LLMClientError(

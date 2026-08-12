@@ -7,7 +7,7 @@ uses sentence boundaries before falling back to character limits.
 
 import re
 
-from models.document_chunk import DocumentChunk
+from app.models.document_chunk import DocumentChunk
 
 
 class TextChunker:

@@ -12,7 +12,12 @@ import logging
 from .sentence_transformer_embedder import SentenceTransformerEmbedder
 from .openai_embedder import OpenAIEmbedder
 from .gemini_embedder import GeminiEmbedder
-from .base_embedder import BaseEmbedder
+from .base_embedder import (
+    BaseEmbedder,
+    EmbeddingValidationError,
+    EmbeddingInitializationError,
+)
+from .config import DEFAULT_PROVIDER
 
 logger = logging.getLogger(__name__)
 
@@ -36,27 +41,30 @@ class EmbedderFactory:
     }
 
     @classmethod
-    def get_embedder(cls, provider: str, **kwargs: Any) -> BaseEmbedder:
+    def get_embedder(cls, provider: str = DEFAULT_PROVIDER, **kwargs: Any) -> BaseEmbedder:
         """Return an embedder instance for the requested provider.
 
         Args:
             provider: Provider key (case-insensitive). Valid values listed above.
+                      Defaults to DEFAULT_PROVIDER from config.
             **kwargs: Forwarded to the provider's constructor (e.g., model_name, device).
 
         Returns:
             An instance of BaseEmbedder.
 
         Raises:
-            ValueError: If the provider is unknown.
+            EmbeddingValidationError: If provider is empty or not a string.
+            EmbeddingInitializationError: If the provider key is unknown.
         """
         if not provider or not isinstance(provider, str):
-            raise ValueError("provider must be a non-empty string")
+            raise EmbeddingValidationError("provider must be a non-empty string")
 
         key = provider.strip().lower()
         provider_cls = cls._providers.get(key)
         if provider_cls is None:
             valid = ", ".join(sorted(cls._providers.keys()))
-            raise ValueError(f"Unknown embedder provider '{provider}'. Valid providers: {valid}")
+            raise EmbeddingInitializationError(f"Unknown embedder provider '{provider}'. Valid providers: {valid}")
 
         logger.info("Creating embedder for provider '%s'", key)
         return provider_cls(**kwargs)
+

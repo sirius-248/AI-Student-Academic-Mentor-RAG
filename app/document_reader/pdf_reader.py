@@ -36,6 +36,9 @@ class PDFReader:
         path = Path(file_path) if file_path else self.file_path
         if path is None:
             raise ValueError("PDF file path is required.")
+        # Retain an explicitly supplied path so page-oriented operations can
+        # subsequently use the same reader instance.
+        self.file_path = path
 
         if not path.exists():
             raise FileNotFoundError(f"PDF file not found: {path}")
