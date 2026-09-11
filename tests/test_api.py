@@ -5,7 +5,10 @@ from fastapi.testclient import TestClient
 from app.api.config import APISettings
 from app.api.dependencies import RegisteredDocument
 from app.api.main import create_app
+from app.models.document_chunk import DocumentChunk
 from app.pipeline import AnswerResponse, DocumentMetadata, IndexingResult, SourceReference
+from app.vector_store.config import VECTOR_STORE_DIR, INDEX_FILENAME, METADATA_FILENAME
+from app.vector_store.faiss_vector_store import FAISSVectorStore
 
 
 class FakePipeline:
@@ -99,3 +102,73 @@ def test_question_uses_mocked_pipeline(tmp_path):
     body = response.json()
     assert body["model_name"] == "fake-model"
     assert body["sources"][0]["page_number"] == 12
+
+
+def test_fresh_startup_with_no_vector_store(tmp_path, monkeypatch):
+    vector_store_dir = tmp_path / "vector_store"
+    monkeypatch.setattr("app.vector_store.config.VECTOR_STORE_DIR", vector_store_dir)
+    monkeypatch.setattr("app.vector_store.config.INDEX_FILENAME", "index.faiss")
+    monkeypatch.setattr("app.vector_store.config.METADATA_FILENAME", "metadata.pkl")
+
+    app = create_app(APISettings(upload_dir=tmp_path / "uploads", max_upload_size_mb=1))
+
+    assert hasattr(app.state, "vector_store")
+    assert app.state.vector_store.is_empty()
+    assert app.state.document_registry.get("doc-1") is None
+
+
+def test_startup_with_persisted_faiss_metadata_recovers_registry(tmp_path, monkeypatch):
+    vector_store_dir = tmp_path / "vector_store"
+    monkeypatch.setattr("app.vector_store.config.VECTOR_STORE_DIR", vector_store_dir)
+    monkeypatch.setattr("app.vector_store.config.INDEX_FILENAME", "index.faiss")
+    monkeypatch.setattr("app.vector_store.config.METADATA_FILENAME", "metadata.pkl")
+
+    store = FAISSVectorStore(embedding_dim=3)
+    chunk = DocumentChunk(
+        document_id="doc-1",
+        chunk_id=1,
+        text="Machine learning is a field of study.",
+        source_file="module.pdf",
+        page_number=1,
+        embedding=[1.0, 0.0, 0.0],
+    )
+    store.add_documents([chunk])
+    store.save(directory=vector_store_dir)
+
+    app = create_app(APISettings(upload_dir=tmp_path / "uploads", max_upload_size_mb=1))
+    reconstructed = app.state.document_registry.get("doc-1")
+
+    assert reconstructed is not None
+    assert reconstructed.document_id == "doc-1"
+    assert reconstructed.filename == "module.pdf"
+    assert reconstructed.local_path == tmp_path / "uploads" / "doc-1_module.pdf"
+    assert reconstructed.indexed is True
+
+
+def test_question_after_simulated_restart_uses_persisted_state(tmp_path, monkeypatch):
+    vector_store_dir = tmp_path / "vector_store"
+    monkeypatch.setattr("app.vector_store.config.VECTOR_STORE_DIR", vector_store_dir)
+    monkeypatch.setattr("app.vector_store.config.INDEX_FILENAME", "index.faiss")
+    monkeypatch.setattr("app.vector_store.config.METADATA_FILENAME", "metadata.pkl")
+
+    store = FAISSVectorStore(embedding_dim=3)
+    chunk = DocumentChunk(
+        document_id="doc-1",
+        chunk_id=1,
+        text="Machine learning is a field of study.",
+        source_file="module.pdf",
+        page_number=1,
+        embedding=[1.0, 0.0, 0.0],
+    )
+    store.add_documents([chunk])
+    store.save(directory=vector_store_dir)
+
+    app = create_app(APISettings(upload_dir=tmp_path / "uploads", max_upload_size_mb=1))
+    app.state.pipeline = FakePipeline()
+
+    client = TestClient(app)
+    response = client.post("/api/v1/questions/ask", json={"document_id": "doc-1", "question": "What is machine learning?"})
+
+    assert response.status_code == 200
+    assert response.json()["document_id"] == "doc-1"
+    assert response.json()["answer"] == "Supervised and unsupervised learning are types of machine learning."

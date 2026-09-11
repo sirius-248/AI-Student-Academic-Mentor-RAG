@@ -118,7 +118,7 @@ class RAGPipeline:
         self._retriever = retriever
         self._prompt_builder = prompt_builder
         self._gemini_client = gemini_client
-        self._config = config or PipelineConfig()
+        self._config = config or PipelineConfig.from_environment()
 
     def index_document(self, document_path: str | Path, document_id: str | None = None) -> IndexingResult:
         """Read, clean, chunk, embed, and persist one document."""
