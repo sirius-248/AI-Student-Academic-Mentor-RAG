@@ -64,6 +64,7 @@ class Retriever:
         query: str,
         top_k: Optional[int] = None,
         min_score: Optional[float] = None,
+        document_ids: Optional[List[str]] = None,
     ) -> RetrievedContext:
         """Retrieve relevant context for a user query.
 
@@ -103,6 +104,7 @@ class Retriever:
             raw_results: List[SearchResult] = self.vector_store.search(
                 query_embedding=query_vector,
                 top_k=effective_top_k,
+                document_ids=document_ids,
             )
             logger.debug("Vector store returned %d raw results", len(raw_results))
         except (VectorStoreError, Exception) as exc:

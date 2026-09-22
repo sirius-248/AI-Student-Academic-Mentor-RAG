@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 from fastapi.testclient import TestClient
 
@@ -6,7 +7,9 @@ from app.api.config import APISettings
 from app.api.dependencies import RegisteredDocument
 from app.api.main import create_app
 from app.models.document_chunk import DocumentChunk
-from app.pipeline import AnswerResponse, DocumentMetadata, IndexingResult, SourceReference
+from app.pipeline import AnswerResponse, DocumentMetadata, IndexingResult, SourceReference, RAGPipeline
+from app.pipeline.config import PipelineConfig
+from app.retriever.retriever import Retriever
 from app.vector_store.config import VECTOR_STORE_DIR, INDEX_FILENAME, METADATA_FILENAME
 from app.vector_store.faiss_vector_store import FAISSVectorStore
 
@@ -25,6 +28,29 @@ class FakePipeline:
             retrieval_time_ms=2.0, generation_time_ms=10.0, total_time_ms=12.0,
             prompt_context_length=100, chunk_count=1, model_name="fake-model",
         )
+
+
+class DummyEmbeddingService:
+    def embed_query(self, query):
+        return [1.0, 0.0, 0.0]
+
+
+class RecordingVectorStore:
+    def __init__(self):
+        self.seen_document_ids = None
+
+    def search(self, query_embedding, top_k=5, document_ids=None):
+        self.seen_document_ids = document_ids
+        return []
+
+
+class RecordingRetriever:
+    def __init__(self):
+        self.seen_document_ids = None
+
+    def retrieve_context(self, query, top_k=None, min_score=None, document_ids=None):
+        self.seen_document_ids = document_ids
+        return SimpleNamespace(results=[], retrieval_time_ms=0.0, top_k=top_k, query=query)
 
 
 def make_client(tmp_path):
@@ -172,3 +198,70 @@ def test_question_after_simulated_restart_uses_persisted_state(tmp_path, monkeyp
     assert response.status_code == 200
     assert response.json()["document_id"] == "doc-1"
     assert response.json()["answer"] == "Supervised and unsupervised learning are types of machine learning."
+
+
+def test_faiss_vectorstore_document_id_filtering_isolates_results(tmp_path):
+    store = FAISSVectorStore(embedding_dim=3)
+    store.add_documents([
+        DocumentChunk(document_id="doc-A", chunk_id=1, text="doc A chunk", source_file="a.pdf", page_number=1, embedding=[1.0, 0.0, 0.0]),
+        DocumentChunk(document_id="doc-B", chunk_id=1, text="doc B chunk", source_file="b.pdf", page_number=1, embedding=[0.0, 1.0, 0.0]),
+    ])
+
+    results = store.search(query_embedding=[1.0, 0.0, 0.0], top_k=2, document_ids=["doc-A"])
+
+    assert len(results) == 1
+    assert all(result.chunk.document_id == "doc-A" for result in results)
+
+
+def test_faiss_document_aware_search_keeps_id_and_embedding_aligned_when_embedding_is_missing():
+    store = FAISSVectorStore(embedding_dim=3)
+    store._metadata_map = {
+        0: DocumentChunk(document_id="doc-A", chunk_id=1, text="missing embedding", source_file="a.pdf", page_number=1, embedding=None),
+        1: DocumentChunk(document_id="doc-A", chunk_id=2, text="valid embedding", source_file="a.pdf", page_number=2, embedding=[1.0, 0.0, 0.0]),
+    }
+    store._vector_count = 2
+
+    results = store.search(query_embedding=[1.0, 0.0, 0.0], top_k=2, document_ids=["doc-A"])
+
+    assert len(results) == 1
+    assert results[0].chunk.chunk_id == 2
+    assert results[0].chunk.embedding == [1.0, 0.0, 0.0]
+
+
+def test_retiever_propagates_document_ids_to_vector_store():
+    vector_store = RecordingVectorStore()
+    retriever = Retriever(embedding_service=DummyEmbeddingService(), vector_store=vector_store)
+
+    retriever.retrieve_context("question", top_k=3, document_ids=["doc-A"])
+
+    assert vector_store.seen_document_ids == ["doc-A"]
+
+
+def test_rag_pipeline_propagates_document_ids_to_retriever():
+    pipeline = RAGPipeline.__new__(RAGPipeline)
+    pipeline._validated_question = staticmethod(lambda value: value.strip())
+    pipeline._validated_document_ids = staticmethod(lambda value: frozenset(value))
+    pipeline._context_with_results = staticmethod(lambda context, results: context)
+    pipeline._prompt_request = staticmethod(lambda question, context: SimpleNamespace(question=question, retrieved_context=context))
+    pipeline._source_references = staticmethod(lambda results: ())
+    pipeline._retriever = RecordingRetriever()
+    pipeline._prompt_builder = type("PB", (), {"build_prompt": lambda self, request: SimpleNamespace(full_prompt="answer", context_length=0, chunk_count=0)})()
+    pipeline._gemini_client = type("GC", (), {"generate": lambda self, prompt: "answer", "model": "fake"})()
+    pipeline._config = type("C", (), {"default_top_k": 5})()
+
+    pipeline.answer_question("What is machine learning?", document_ids=["doc-A"])
+
+    assert pipeline._retriever.seen_document_ids == frozenset({"doc-A"})
+
+
+def test_preserve_global_behavior_when_document_ids_is_none(tmp_path):
+    store = FAISSVectorStore(embedding_dim=3)
+    store.add_documents([
+        DocumentChunk(document_id="doc-A", chunk_id=1, text="doc A chunk", source_file="a.pdf", page_number=1, embedding=[1.0, 0.0, 0.0]),
+        DocumentChunk(document_id="doc-B", chunk_id=1, text="doc B chunk", source_file="b.pdf", page_number=1, embedding=[0.0, 1.0, 0.0]),
+    ])
+
+    results = store.search(query_embedding=[1.0, 0.0, 0.0], top_k=5)
+
+    assert len(results) == 2
+    assert {result.chunk.document_id for result in results} == {"doc-A", "doc-B"}

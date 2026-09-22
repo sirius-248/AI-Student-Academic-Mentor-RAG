@@ -29,12 +29,15 @@ class BaseVectorStore(ABC):
         self,
         query_embedding: Sequence[float],
         top_k: int = 5,
+        document_ids: Sequence[str] | None = None,
     ) -> List[SearchResult]:
         """Perform a nearest-neighbor vector similarity search.
 
         Args:
             query_embedding: Float vector representing the query embedding.
             top_k: Number of nearest neighbors to retrieve.
+            document_ids: Optional set of document IDs to scope the candidate
+                search space before selecting top_k.
 
         Returns:
             List of SearchResult objects sorted by descending similarity score.

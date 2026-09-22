@@ -44,7 +44,7 @@ class _VectorStore(Protocol):
 
 
 class _Retriever(Protocol):
-    def retrieve_context(self, query: str, top_k: int | None = None) -> Any: ...
+    def retrieve_context(self, query: str, top_k: int | None = None, document_ids: Sequence[str] | None = None) -> Any: ...
 
 
 class _PromptBuilder(Protocol):
@@ -170,7 +170,11 @@ class RAGPipeline:
         started = time.perf_counter()
         logger.info("Answering question", extra={"question_length": len(query), "top_k": effective_top_k})
         try:
-            context = self._retriever.retrieve_context(query, top_k=effective_top_k)
+            context = self._retriever.retrieve_context(
+                query,
+                top_k=effective_top_k,
+                document_ids=allowed_ids,
+            )
             results = tuple(getattr(context, "results", ()))
             if allowed_ids is not None:
                 results = tuple(result for result in results if getattr(getattr(result, "chunk", None), "document_id", None) in allowed_ids)

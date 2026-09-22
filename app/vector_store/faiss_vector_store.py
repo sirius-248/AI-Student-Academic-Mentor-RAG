@@ -146,12 +146,15 @@ class FAISSVectorStore(BaseVectorStore):
         self,
         query_embedding: Sequence[float],
         top_k: int = DEFAULT_TOP_K,
+        document_ids: Sequence[str] | None = None,
     ) -> List[SearchResult]:
         """Search for the top_k nearest neighbors using cosine similarity.
 
         Args:
             query_embedding: Float vector representing the query embedding.
             top_k: Maximum number of nearest results to return.
+            document_ids: Optional set of document IDs to scope the candidate
+                search space before top_k selection.
 
         Returns:
             List of SearchResult objects sorted by descending similarity score.
@@ -177,33 +180,88 @@ class FAISSVectorStore(BaseVectorStore):
                 f"Query vector dimension {len(query_vec)} does not match vector store dimension {self._embedding_dim}"
             )
 
-        top_k = max(1, int(top_k))
-        effective_k = min(top_k, self._vector_count)
-
         import faiss
+        top_k = max(1, int(top_k))
+
+        # Preserve the current behavior when no document scope is supplied.
+        if document_ids is None:
+            effective_k = min(top_k, self._vector_count)
+            query_np = np.array([query_vec], dtype=np.float32)
+            faiss.normalize_L2(query_np)
+            try:
+                distances, indices = self._index.search(query_np, k=effective_k)
+            except Exception as exc:
+                logger.exception("FAISS search execution failed: %s", exc)
+                raise VectorStoreSearchError(f"FAISS search failed: {exc}") from exc
+
+            results: List[SearchResult] = []
+            if len(indices) > 0:
+                for idx, score in zip(indices[0], distances[0]):
+                    if idx == -1:
+                        continue
+                    chunk = self._metadata_map.get(int(idx))
+                    if chunk is not None:
+                        results.append(SearchResult(chunk=chunk, score=float(score)))
+                    else:
+                        logger.warning("FAISS index returned ID %d not found in metadata map", idx)
+
+            logger.debug("Search returned %d results for top_k=%d", len(results), top_k)
+            logger.info("Search completed successfully, returned %d matches", len(results))
+            return results
+
+        # Document-aware branch: scope the metadata map to requested docs only
+        # and rank only those stored vectors in a temporary in-memory FAISS
+        # index, without mutating persisted index or metadata representation.
+        requested_ids = frozenset(str(item).strip() for item in document_ids if isinstance(item, str) and str(item).strip())
+        if not requested_ids:
+            raise VectorStoreValidationError("document_ids must contain at least one non-empty ID")
+
+        eligible_ids = []
+        eligible_vectors = []
+        for faiss_id, chunk in self._metadata_map.items():
+            if chunk is None:
+                continue
+            if getattr(chunk, "document_id", None) not in requested_ids:
+                continue
+            if chunk.embedding is None:
+                continue
+            eligible_ids.append(faiss_id)
+            eligible_vectors.append(np.array(chunk.embedding, dtype=np.float32))
+
+        if not eligible_ids:
+            logger.warning("No eligible document-aware vectors found for document_ids=%s", sorted(requested_ids))
+            return []
+
+        vector_matrix = np.array(eligible_vectors, dtype=np.float32)
+        faiss.normalize_L2(vector_matrix)
 
         query_np = np.array([query_vec], dtype=np.float32)
         faiss.normalize_L2(query_np)
 
+        local_index = faiss.IndexFlatIP(self._embedding_dim)
+        local_index.add(vector_matrix)
+
+        effective_k = min(top_k, len(eligible_ids))
         try:
-            distances, indices = self._index.search(query_np, k=effective_k)
+            distances, indices = local_index.search(query_np, k=effective_k)
         except Exception as exc:
-            logger.exception("FAISS search execution failed: %s", exc)
-            raise VectorStoreSearchError(f"FAISS search failed: {exc}") from exc
+            logger.exception("FAISS document-aware search execution failed: %s", exc)
+            raise VectorStoreSearchError(f"FAISS document-aware search failed: {exc}") from exc
 
         results: List[SearchResult] = []
         if len(indices) > 0:
-            for idx, score in zip(indices[0], distances[0]):
-                if idx == -1:
+            for local_idx, score in zip(indices[0], distances[0]):
+                if local_idx == -1:
                     continue
-                chunk = self._metadata_map.get(int(idx))
+                original_faiss_id = eligible_ids[int(local_idx)]
+                chunk = self._metadata_map.get(original_faiss_id)
                 if chunk is not None:
                     results.append(SearchResult(chunk=chunk, score=float(score)))
                 else:
-                    logger.warning("FAISS index returned ID %d not found in metadata map", idx)
+                    logger.warning("Metadata map missed eligible FAISS id %d", original_faiss_id)
 
-        logger.debug("Search returned %d results for top_k=%d", len(results), top_k)
-        logger.info("Search completed successfully, returned %d matches", len(results))
+        logger.debug("Document-aware search returned %d results for top_k=%d on document_ids=%s", len(results), top_k, sorted(requested_ids))
+        logger.info("Search completed successfully, returned %d document-aware matches", len(results))
         return results
 
     def _save_metadata(self, filepath: Path) -> None:
